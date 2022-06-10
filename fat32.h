@@ -25,7 +25,6 @@ typedef struct struct_BPBFAT32_struct {
 } BPB32_struct;
 
 typedef struct struct_BPB_struct {
-
 	uint8_t BS_JumpBoot[3];        // Jump Instruction. Size: 3 bytes
 	uint8_t BS_OEMName[8];         // The system that formatted the disk. Size: 8 bytes
 	uint16_t BytesPerSector;       // Bytes per logical sector (It is always will be 512 in our case). Size: 2 bytes

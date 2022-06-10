@@ -1,4 +1,4 @@
 all:
-	gcc main.c -o hw3
+	gcc main.c filesystem.c -o hw3
 clean:
 	rm -rf hw3

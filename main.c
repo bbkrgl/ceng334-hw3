@@ -1,8 +1,4 @@
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-
-#include "fat32.h"
+#include "filesystem.h"
 
 #define BUFFER_SIZE 256
 
@@ -17,7 +13,9 @@ void cpstr_del(char* str1, char* str2, int len)
 }
 
 int main(int argc, char* argv[])
-{	
+{
+	open_fs(argv[1]);
+
 	int i = 0;
 	char curr;
 	char strbuffer[BUFFER_SIZE];
