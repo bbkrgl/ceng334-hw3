@@ -1,5 +1,13 @@
 #include "filesystem.h"
 
+int fs_fd = 0;
+BPB_struct bpb;
+FAT_entry** fat_table;
+uint32_t CWD_cluster;
+char* CWD;
+
+char* months[] = {"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
+
 inline static void handle_error(char* errmsg)
 {
 	fprintf(stderr, "%s:\n%s\n", errmsg, strerror(errno));
@@ -98,7 +106,10 @@ int read_directory_entry(int cluster_num, file_entry** directory, int size)
 }
 
 int cmp_dirname(char* dirname, file_entry* fe)
-{	
+{
+	if (!(fe->msdos.attributes & 0x10))
+		return 0;
+
 	if (fe->lfnc == 0) {
 		if (strlen(dirname) > 7)
 			return 0;
@@ -123,7 +134,8 @@ int cmp_dirname(char* dirname, file_entry* fe)
 		if (fe->lfn_list[lfn_i].name2[0] == 0xFFFF)
 			break;
 		for (int i = 0; i < 6; i++) {
-			if (strlen(dirname) < lfn_i * 13 + i + 5 && fe->lfn_list[lfn_i].name2[i] == ' ')
+			if (strlen(dirname) < lfn_i * 13 + i + 5 &&
+				(fe->lfn_list[lfn_i].name2[i] == ' ' || fe->lfn_list[lfn_i].name2[i] == 0xFFFF))
 				continue;
 			if (strlen(dirname) < lfn_i * 13 + i + 5 ||
 				dirname[lfn_i * 13 + i + 5] != fe->lfn_list[lfn_i].name2[i])
@@ -133,7 +145,8 @@ int cmp_dirname(char* dirname, file_entry* fe)
 		if (fe->lfn_list[lfn_i].name3[0] == 0xFFFF)
 			break;
 		for (int i = 0; i < 2; i++) {
-			if (strlen(dirname) < lfn_i * 13 + i + 11 && fe->lfn_list[lfn_i].name3[i] == ' ')
+			if (strlen(dirname) < lfn_i * 13 + i + 11 &&
+				(fe->lfn_list[lfn_i].name3[i] == ' ' || fe->lfn_list[lfn_i].name3[i] == 0xFFFF))
 				continue;
 			if (strlen(dirname) < lfn_i * 13 + i + 11 ||
 				dirname[lfn_i * 13 + i + 11] != fe->lfn_list[lfn_i].name3[i])
@@ -148,12 +161,15 @@ uint32_t find_dir_cluster(char* dir)
 {
 	if (!strcmp(dir, CWD))
 		return CWD_cluster;
+	else if (dir[strlen(dir) - 1] == '/' && !strncmp(dir, CWD, strlen(CWD)))
+		return CWD_cluster;
 
 	uint32_t dir_cluster;
 	char* dir_cp = strdup(dir);
-	char* dirname = strsep(&dir_cp, "/");
-	if (dir[0] == '/') {
+	char* dirname; 
+	if (dir_cp[0] == '/') {
 		dir_cluster = bpb.extended.RootCluster;
+		dirname = strsep(&dir_cp, "/");
 	} else {
 		dir_cluster = CWD_cluster;
 	}
@@ -174,9 +190,11 @@ uint32_t find_dir_cluster(char* dir)
 			return 0;
 
 		dir_cluster = (fe[dir_i].msdos.eaIndex << 16) | fe[dir_i].msdos.firstCluster;
+		free(fe->lfn_list);
+		free(fe);
 	}
-
 	free(dir_cp);
+
 	return dir_cluster;
 }
 
@@ -193,6 +211,7 @@ void open_fs(char* fsname)
 		exit(0);
 	}
 
+	CWD = strdup("/");
 	CWD_cluster = bpb.extended.RootCluster;
 
 	read_fat_tables();

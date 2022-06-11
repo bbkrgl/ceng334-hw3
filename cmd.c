@@ -15,7 +15,7 @@ void ls(char* dir, int pp)
 	uint32_t dir_cluster = find_dir_cluster(dir);
 
 	file_entry* fe = 0;
-	int dot = 0;
+	int dot = 1;
 	int dirs_read = read_directory_entry(dir_cluster, &fe, 1);
 	if (!pp) {
 		for (int i = 0; i < dirs_read; i++) {
@@ -24,7 +24,7 @@ void ls(char* dir, int pp)
 					printf(".");
 					if (dot)
 						printf(".");
-					dot = 1;
+					dot--;
 				} else {
 					print_name(fe[i].msdos.filename, 1, 8);
 					print_name(fe[i].msdos.extension, 0, 3);
@@ -72,5 +72,16 @@ void ls(char* dir, int pp)
 			}
 			printf("\n");
 		}	
+	}
+}
+
+void cd(char* newcwd)
+{
+	int newcwd_cluster = find_dir_cluster(newcwd);
+	if (newcwd_cluster) {
+		if (CWD[strlen(CWD) - 1] != '/')
+			CWD = strcat(CWD, "/");
+		CWD = strcat(CWD, newcwd);
+		CWD_cluster = newcwd_cluster;
 	}
 }

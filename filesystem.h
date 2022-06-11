@@ -24,13 +24,13 @@ typedef struct file_entry {
 	FatFile83 msdos;
 } file_entry;
 
-static int fs_fd = 0;
-static BPB_struct bpb;
-static FAT_entry** fat_table;
-static char* CWD = "/";
-static uint32_t CWD_cluster;
+extern int fs_fd;
+extern BPB_struct bpb;
+extern FAT_entry** fat_table;
+extern uint32_t CWD_cluster;
+extern char* CWD;
 
-static char* months[] = {"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
+extern char* months[];
 
 void open_fs(char* fsname);
 int read_cluster(int fat_id, uint32_t cluster_num, void** data, int size);

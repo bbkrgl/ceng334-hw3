@@ -4,5 +4,6 @@
 #include "filesystem.h"
 
 void ls(char*, int pp);
+void cd(char* newcwd);
 
 #endif

@@ -24,7 +24,7 @@ int main(int argc, char* argv[])
 	char** args = 0;
 	int cmd_argc = 0;
 
-	printf("/>");
+	printf("%s> ", CWD);
 
 	while ((curr = getchar()) != EOF && i < BUFFER_SIZE) {
 		if (curr == ' ' || (curr == '\n' && i != 0)) {
@@ -61,7 +61,8 @@ int main(int argc, char* argv[])
 
 				return 0;
 			} else if (!strcmp(cmd, "cd")) {
-				printf("%s\n", cmd);
+				if (cmd_argc > 0)
+					cd(args[0]);
 			} else if (!strcmp(cmd, "ls")) {
 				if (cmd_argc > 0) {
 					if (!strcmp(args[0], "-l")) {
@@ -98,7 +99,7 @@ int main(int argc, char* argv[])
 			args = 0;
 			cmd_argc = 0;
 
-			printf("%s>", CWD);
+			printf("%s> ", CWD);
 		} else {
 			strbuffer[i] = curr;
 			i++;
