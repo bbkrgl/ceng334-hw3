@@ -70,7 +70,21 @@ int read_directory_entry(int cluster_num, file_entry** directory, int size)
 			  			(files_read + 1) * sizeof(file_entry));
 
 					(*directory)[files_read].lfn_list = 0;
+				/*
+					(*directory)[files_read].lfn_filename = malloc(sizeof(char) * 7);
+					for (int k = 1; k < 8; k++)
+						(*directory)[files_read].lfn_filename[k] = data[i][j].msdos.filename[k];
+				} else {
+					for (int k = parsed_lfn - 1; k >= 0; k--) {
+	      					
+						(*directory)[files_read].lfn_filename = malloc(sizeof(char) * );
+						for (int l = 0; l < 5; l++) {
+							(*directory)[files_read].lfn_list[k].name1;
+						}
+					}
+				*/
 				}
+				
 				(*directory)[files_read].msdos = data[i][j].msdos;
 				(*directory)[files_read].lfnc = parsed_lfn;
 				files_read++;
@@ -106,6 +120,7 @@ void print_name(void* str, int start, int len)
 	}
 }
 
+// TODO: New header for functions
 void ls(char* dir, int pp)
 {
 	file_entry* fe = 0;
@@ -126,8 +141,112 @@ void ls(char* dir, int pp)
 		}
 		printf("\n");
 	} else {
+		for (int i = 0; i < dirs_read; i++) {
+			if (fe[i].msdos.attributes & 0x10) { // FIXME: Time is not correct
+				printf("drwx------ 1 root root 0 %d %s %d %d:%d ",
+					fe[i].msdos.fileSize, months[((fe[i].msdos.modifiedDate >> 5) & 0x0F) - 1],
+					fe[i].msdos.modifiedDate & 0x1F, fe[i].msdos.modifiedTime >> 11,
+	   				(fe[i].msdos.modifiedTime >> 5) & 0x3F);
+			} else {
+				printf("-rwx------ 1 root root %d %s %d %d:%d ",
+					fe[i].msdos.fileSize, months[((fe[i].msdos.modifiedDate >> 5) & 0x0F) - 1],
+					fe[i].msdos.modifiedDate & 0x1F, fe[i].msdos.modifiedTime >> 11,
+	   				(fe[i].msdos.modifiedDate >> 5) & 0x3F);
+			}
 
+			if (fe[i].lfnc == 0) {
+				print_name(fe[i].msdos.filename, 1, 8);
+				print_name(fe[i].msdos.extension, 0, 3);
+			} else {
+				for (int j = fe[i].lfnc - 1; j >= 0; j--) {
+					print_name(fe[i].lfn_list[j].name1, 0, 5);
+					print_name(fe[i].lfn_list[j].name2, 0, 6);
+					print_name(fe[i].lfn_list[j].name3, 0, 2);
+				}
+			}
+			printf("\n");
+		}	
 	}
+}
+
+int cmp_dirname(char* dirname, file_entry* fe)
+{	
+	if (fe->lfnc == 0) {
+		if (strlen(dirname) > 7)
+			return 0;
+		for (int i = 0; i < 7; i++) {
+			if (fe->msdos.filename[i] == ' ' && strlen(dirname) < i)
+				continue;
+
+			if (strlen(dirname) < i || dirname[i] != fe->msdos.filename[i + 1])
+				return 0;
+		}
+		return 1;
+      	}
+
+	for (int lfn_i = fe->lfnc - 1; lfn_i >= 0; lfn_i--) {
+		for (int i = 0; i < 5; i++) {
+			if (strlen(dirname) < lfn_i * 13 + i && fe->lfn_list[lfn_i].name1[i] == ' ')
+				continue;
+			if (strlen(dirname) < lfn_i * 13 + i ||
+				dirname[lfn_i * 13 + i] != fe->lfn_list[lfn_i].name1[i])
+				return 0;
+		}
+		
+		if (fe->lfn_list[lfn_i].name2[0] == 0xF)
+			break;
+		for (int i = 0; i < 6; i++) {
+			if (strlen(dirname) < lfn_i * 13 + i + 5 && fe->lfn_list[lfn_i].name2[i] == ' ')
+				continue;
+			if (strlen(dirname) < lfn_i * 13 + i + 5 ||
+				dirname[lfn_i * 13 + i + 5] != fe->lfn_list[lfn_i].name2[i])
+				return 0;
+		}
+
+		if (fe->lfn_list[lfn_i].name3[0] == 0xF)
+			break;
+		for (int i = 0; i < 2; i++) {
+			if (strlen(dirname) < lfn_i * 13 + i + 11 && fe->lfn_list[lfn_i].name3[i] == ' ')
+				continue;
+			if (strlen(dirname) < lfn_i * 13 + i + 11 ||
+				dirname[lfn_i * 13 + i + 11] != fe->lfn_list[lfn_i].name3[i])
+				return 0;
+		}
+	}
+
+	return 1;
+}
+
+uint32_t find_dir_cluster(char* dir)
+{
+	uint32_t dir_cluster = bpb.extended.RootCluster;
+
+	if (!strcmp(dir, "/"))
+		return dir_cluster;
+
+	char* dir_cp = strdup(dir);
+	char* dirname = strsep(&dir_cp, "/");
+	while ((dirname = strsep(&dir_cp, "/")) != NULL) {
+		file_entry* fe = 0;
+		int dirs_read = read_directory_entry(dir_cluster, &fe, 1);
+		int dir_found = 0;
+		int dir_i = 0;
+		for (; dir_i < dirs_read; dir_i++) {
+			if (cmp_dirname(dirname, &fe[dir_i])) {
+				dir_found = 1;
+				break;
+			}
+		}
+
+		if (!dir_found)
+			return 0;
+
+		dir_cluster = (fe[dir_i].msdos.eaIndex << 16) || fe[dir_i].msdos.firstCluster;
+		printf("%d\n", dir_cluster);
+	}
+
+	free(dir_cp);
+	return dir_cluster;
 }
 
 void open_fs(char* fsname)
@@ -144,5 +263,6 @@ void open_fs(char* fsname)
 	}
 
 	read_fat_tables();
-	ls("/", 0);
+	uint32_t dir_cluster = find_dir_cluster("/dir1");
+	printf("%d\n", dir_cluster);
 }

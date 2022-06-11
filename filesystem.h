@@ -19,6 +19,7 @@ typedef struct FAT_entry {
 
 typedef struct file_entry {
 	int lfnc;
+	char* lfn_filename;
 	FatFileLFN* lfn_list;
 	FatFile83 msdos;
 } file_entry;
@@ -27,6 +28,11 @@ static int fs_fd = 0;
 static BPB_struct bpb;
 static FAT_entry** fat_table;
 
+static char* months[] = {"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
+
 void open_fs(char* fsname);
+int read_cluster(int fat_id, uint32_t cluster_num, void** data, int size);
+int read_directory_entry(int cluster_num, file_entry** directory, int size);
+uint32_t find_dir_cluster(char* dir);
 
 #endif
