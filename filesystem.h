@@ -17,6 +17,12 @@ typedef struct FAT_entry {
 } FAT_entry;
 #pragma pack(pop)
 
+typedef struct file_entry {
+	int lfnc;
+	FatFileLFN* lfn_list;
+	FatFile83 msdos;
+} file_entry;
+
 static int fs_fd = 0;
 static BPB_struct bpb;
 static FAT_entry** fat_table;
