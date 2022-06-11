@@ -1,4 +1,4 @@
-#include "filesystem.h"
+#include "cmd.h"
 
 #define BUFFER_SIZE 256
 
@@ -24,7 +24,6 @@ int main(int argc, char* argv[])
 	char** args = 0;
 	int cmd_argc = 0;
 
-	char* CWD = "/";
 	printf("/>");
 
 	while ((curr = getchar()) != EOF && i < BUFFER_SIZE) {
@@ -39,6 +38,7 @@ int main(int argc, char* argv[])
 				args = realloc(args, (cmd_argc + 1) * sizeof(char*));
 				args[cmd_argc] = malloc((i + 1) * sizeof(char));
 				cpstr_del(args[cmd_argc], strbuffer, i);
+				cmd_argc++;
 			}
 
 			i = 0;
@@ -63,7 +63,18 @@ int main(int argc, char* argv[])
 			} else if (!strcmp(cmd, "cd")) {
 				printf("%s\n", cmd);
 			} else if (!strcmp(cmd, "ls")) {
-				printf("%s\n", cmd);
+				if (cmd_argc > 0) {
+					if (!strcmp(args[0], "-l")) {
+						if (cmd_argc > 1)
+							ls(args[1], 1);
+						else
+							ls(CWD, 1);
+					} else {
+						ls(args[0], 0);
+					}
+				} else {
+					ls(CWD, 0);
+				}
 			} else if (!strcmp(cmd, "mkdir")) {
 				printf("%s\n", cmd);
 			} else if (!strcmp(cmd, "touch")) {

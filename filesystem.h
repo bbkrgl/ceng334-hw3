@@ -27,6 +27,8 @@ typedef struct file_entry {
 static int fs_fd = 0;
 static BPB_struct bpb;
 static FAT_entry** fat_table;
+static char* CWD = "/";
+static uint32_t CWD_cluster;
 
 static char* months[] = {"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
 
