@@ -61,17 +61,8 @@ int read_directory_entry(int cluster_num, file_entry** directory, int size)
 	int entries_per_cluster = bpb.SectorsPerCluster * BPS / sizeof(FatFileEntry);
 	for (int i = 0; i < size; i++) {
 		for (int j = 0; j < entries_per_cluster; j++) {
-			if (data[i][j].lfn.sequence_number == 0)
+			if (data[i][j].lfn.sequence_number == 0xE5 || data[i][j].lfn.sequence_number == 0) // What does 0xE5 mean???
 				continue;
-			if (data[i][j].lfn.sequence_number == 0xE5) {
-				if ((*directory)[files_read].lfnc)
-					free((*directory)[files_read].lfn_list);
-				if (--files_read)
-					*directory = realloc(*directory, files_read * sizeof(file_entry));
-				else
-					free(*directory);
-				continue;
-			}
 
 			if (data[i][j].lfn.attributes != 0x0F) {
 				if (!parsed_lfn) {
