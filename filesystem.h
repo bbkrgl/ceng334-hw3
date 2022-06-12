@@ -34,7 +34,7 @@ extern char* months[];
 
 void open_fs(char* fsname);
 int read_cluster(int fat_id, uint32_t cluster_num, void** data, int size);
-int read_directory_entry(int cluster_num, file_entry** directory, int size);
-uint32_t find_dir_cluster(char* dir);
+int read_directory_table(int cluster_num, file_entry** directory, int size);
+uint32_t find_dir_cluster(char* dir, int is_dir);
 
 #endif

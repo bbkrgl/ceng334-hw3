@@ -12,11 +12,11 @@ void print_name(void* str, int start, int len)
 
 void ls(char* dir, int pp)
 {
-	uint32_t dir_cluster = find_dir_cluster(dir);
+	uint32_t dir_cluster = find_dir_cluster(dir, 1);
 
 	file_entry* fe = 0;
 	int dot = 1;
-	int dirs_read = read_directory_entry(dir_cluster, &fe, 1);
+	int dirs_read = read_directory_table(dir_cluster, &fe, 1);
 	if (!pp) {
 		for (int i = 0; i < dirs_read; i++) {
 			if (fe[i].lfnc == 0) {
@@ -75,9 +75,27 @@ void ls(char* dir, int pp)
 	}
 }
 
+void concat_cwd(char* newcwd) // TODO: Fix
+{
+	char* cwd = strdup(CWD);
+	char* nwd = strdup(newcwd);
+	char* tmp;
+	while ((nwd = strsep(&nwd, "/")) != NULL) {
+		if (!strcmp(nwd, "..")) {
+			tmp = strrchr(cwd, '/');
+			if (tmp)
+				*tmp = '\0';
+		}
+	}
+
+	printf("%s\n", cwd);
+	free(cwd);
+	free(nwd);
+}
+
 void cd(char* newcwd)
 {
-	int newcwd_cluster = find_dir_cluster(newcwd);
+	int newcwd_cluster = find_dir_cluster(newcwd, 1);
 	if (newcwd_cluster) {
 		if (CWD[strlen(CWD) - 1] != '/')
 			CWD = strcat(CWD, "/");

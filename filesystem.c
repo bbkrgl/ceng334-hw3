@@ -6,7 +6,8 @@ FAT_entry** fat_table;
 uint32_t CWD_cluster;
 char* CWD;
 
-char* months[] = {"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
+char* months[] = {"January", "February", "March", "April", "May", "June",
+	"July", "August", "September", "October", "November", "December"};
 
 inline static void handle_error(char* errmsg)
 {
@@ -57,7 +58,7 @@ int read_cluster(int fat_id, uint32_t cluster_num, void** data, int size)
 	return i;
 }
 
-int read_directory_entry(int cluster_num, file_entry** directory, int size)
+int read_directory_table(int cluster_num, file_entry** directory, int size) // TODO: Other FATs
 {
 	FatFileEntry** data = malloc(sizeof(FatFileEntry) * size);	
 	for (int i = 0; i < size; i++)
@@ -69,7 +70,8 @@ int read_directory_entry(int cluster_num, file_entry** directory, int size)
 	int entries_per_cluster = bpb.SectorsPerCluster * BPS / sizeof(FatFileEntry);
 	for (int i = 0; i < size; i++) {
 		for (int j = 0; j < entries_per_cluster; j++) {
-			if (data[i][j].lfn.sequence_number == 0xE5 || data[i][j].lfn.sequence_number == 0) // What does 0xE5 mean???
+			if (data[i][j].lfn.sequence_number == 0xE5
+				|| data[i][j].lfn.sequence_number == 0) // What does 0xE5 mean???
 				continue;
 
 			if (data[i][j].lfn.attributes != 0x0F) {
@@ -105,9 +107,11 @@ int read_directory_entry(int cluster_num, file_entry** directory, int size)
 	return files_read;
 }
 
-int cmp_dirname(char* dirname, file_entry* fe)
+int cmp_dirname(char* dirname, file_entry* fe, int is_dir)
 {
-	if (!(fe->msdos.attributes & 0x10))
+	if (!(fe->msdos.attributes & 0x10) && is_dir)
+		return 0;
+	else if (fe->msdos.attributes & 0x10 && !is_dir)
 		return 0;
 
 	if (fe->lfnc == 0) {
@@ -157,7 +161,19 @@ int cmp_dirname(char* dirname, file_entry* fe)
 	return 1;
 }
 
-uint32_t find_dir_cluster(char* dir)
+int cmp_parent(char* dirname, file_entry* fe, uint32_t curr_cluster)
+{
+	if (fe->msdos.filename[0] != 0x2E || strcmp(dirname, ".."))
+		return 0;
+	
+	int cl = (fe->msdos.eaIndex << 16) | fe->msdos.firstCluster;
+	if (curr_cluster == cl)
+		return 0;
+
+	return 1;
+}
+
+uint32_t find_dir_cluster(char* dir, int is_dir)
 {
 	if (!strcmp(dir, CWD))
 		return CWD_cluster;
@@ -176,11 +192,12 @@ uint32_t find_dir_cluster(char* dir)
 
 	while ((dirname = strsep(&dir_cp, "/")) != NULL) {
 		file_entry* fe = 0;
-		int dirs_read = read_directory_entry(dir_cluster, &fe, 1);
+		int dirs_read = read_directory_table(dir_cluster, &fe, 1);
 		int dir_found = 0;
 		int dir_i = 0;
 		for (; dir_i < dirs_read; dir_i++) {
-			if (cmp_dirname(dirname, &fe[dir_i])) {
+			if (cmp_dirname(dirname, &fe[dir_i], is_dir)
+				|| cmp_parent(dirname, &fe[dir_i], dir_cluster)) {
 				dir_found = 1;
 				break;
 			}
@@ -190,6 +207,9 @@ uint32_t find_dir_cluster(char* dir)
 			return 0;
 
 		dir_cluster = (fe[dir_i].msdos.eaIndex << 16) | fe[dir_i].msdos.firstCluster;
+		if (dir_cluster == 0)
+			dir_cluster = bpb.extended.RootCluster;
+
 		free(fe->lfn_list);
 		free(fe);
 	}
