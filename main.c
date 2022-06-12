@@ -83,7 +83,8 @@ int main(int argc, char* argv[])
 			} else if (!strcmp(cmd, "mv")) {
 				printf("%s\n", cmd);
 			} else if (!strcmp(cmd, "cat")) {
-				printf("%s\n", cmd);
+				if (cmd_argc > 0)
+					cat(args[0]);
 			} else {
 				fprintf(stderr, "Unknown command\n");
 			}

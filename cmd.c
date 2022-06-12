@@ -16,7 +16,7 @@ void ls(char* dir, int pp)
 
 	file_entry* fe = 0;
 	int dot = 1;
-	int dirs_read = read_directory_table(dir_cluster, &fe, 1);
+	int dirs_read = read_directory_table(dir_cluster, &fe);
 	if (!pp) {
 		for (int i = 0; i < dirs_read; i++) {
 			if (fe[i].lfnc == 0) {
@@ -102,4 +102,23 @@ void cd(char* newcwd)
 		CWD = strcat(CWD, newcwd);
 		CWD_cluster = newcwd_cluster;
 	}
+}
+
+void cat(char* file)
+{
+	int file_cluster = find_dir_cluster(file, 0);
+	if (!file_cluster)
+		return;
+
+	char* buffer = 0;
+	int clusters_read = read_clusters(0, file_cluster, (void**) &buffer, -1);
+	int chars_per_cluster = bpb.SectorsPerCluster * BPS;
+	int i = 0;
+	for (; i < clusters_read * chars_per_cluster; i++) {
+		if (buffer[i] == 0)
+			break;
+		printf("%c", buffer[i]);
+	}
+	if (buffer[i - 1] != '\n')
+		printf("\n");
 }

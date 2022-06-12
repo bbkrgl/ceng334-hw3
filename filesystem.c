@@ -33,21 +33,26 @@ void read_fat_tables()
 	}
 }
 
-int read_cluster(int fat_id, uint32_t cluster_num, void** data, int size)
+int read_clusters(int fat_id, uint32_t cluster_num, void** data, int size)
 {
 	uint32_t curr_table_cluster = cluster_num;
 	int i = 0;
-	while (curr_table_cluster != 0xFFFFFFF && i < size) {
+	while ((i < size || size == -1)
+		&& curr_table_cluster != 0xFFFFFFF
+		&& curr_table_cluster != 0xFFFFFF8) {
+		(*data) = realloc(*data, (i + 1) * bpb.SectorsPerCluster * BPS);
+
 		int rlseek = lseek(fs_fd, (bpb.ReservedSectorCount +
-			    bpb.NumFATs * bpb.extended.FATSize +
-			    (curr_table_cluster - 2) * bpb.SectorsPerCluster) * BPS, SEEK_SET);
+			bpb.NumFATs * bpb.extended.FATSize +
+			(curr_table_cluster - 2) * bpb.SectorsPerCluster) * BPS, SEEK_SET);
+
 		if (rlseek == -1)
 			handle_error("Cannot find cluster");
 
-		int rcount = read(fs_fd, data[i], bpb.SectorsPerCluster * BPS);
+		int rcount = read(fs_fd, (*data) + i, bpb.SectorsPerCluster * BPS);
 		if (rcount != bpb.SectorsPerCluster * BPS) {
 			fprintf(stderr, "Cannot read cluster %d.\nBytes read: %d, bytes expected: %d\n",
-	   			curr_table_cluster, rcount, bpb.extended.FATSize * BPS);
+				curr_table_cluster, rcount, bpb.extended.FATSize * BPS);
 			exit(0);
 		}
 
@@ -58,52 +63,49 @@ int read_cluster(int fat_id, uint32_t cluster_num, void** data, int size)
 	return i;
 }
 
-int read_directory_table(int cluster_num, file_entry** directory, int size) // TODO: Other FATs
+int read_directory_table(int cluster_num, file_entry** directory) // TODO: Other FATs
 {
-	FatFileEntry** data = malloc(sizeof(FatFileEntry) * size);	
-	for (int i = 0; i < size; i++)
-		data[i] = malloc(bpb.SectorsPerCluster * BPS);
-	read_cluster(0, cluster_num, (void**) data, size);
+	FatFileEntry* data = 0;
+	int clusters_read = read_clusters(0, cluster_num, (void**) &data, -1);
 	
 	int files_read = 0;
 	int parsed_lfn = 0;
 	int entries_per_cluster = bpb.SectorsPerCluster * BPS / sizeof(FatFileEntry);
-	for (int i = 0; i < size; i++) {
+	for (int i = 0; i < clusters_read; i++) {
 		for (int j = 0; j < entries_per_cluster; j++) {
-			if (data[i][j].lfn.sequence_number == 0xE5
-				|| data[i][j].lfn.sequence_number == 0) // What does 0xE5 mean???
+			if (data[j + entries_per_cluster * i].lfn.sequence_number == 0xE5
+				|| data[j + entries_per_cluster * i].lfn.sequence_number == 0) // What does 0xE5 mean???
 				continue;
 
-			if (data[i][j].lfn.attributes != 0x0F) {
+			if (data[j + entries_per_cluster * i].lfn.attributes != 0x0F) {
 				if (!parsed_lfn) {
 					*directory = realloc(*directory, 
 			  			(files_read + 1) * sizeof(file_entry));
 
 					(*directory)[files_read].lfn_list = 0;
 				}
-				
-				(*directory)[files_read].msdos = data[i][j].msdos;
+
+				(*directory)[files_read].msdos = data[j + entries_per_cluster * i].msdos;
 				(*directory)[files_read].lfnc = parsed_lfn;
 				files_read++;
 				parsed_lfn = 0;
 			} else {
 				*directory = realloc(*directory, 
 			 		(files_read + 1) * sizeof(file_entry));
+				if (!parsed_lfn)
+					(*directory)[files_read].lfn_list = 0;
 
 				(*directory)[files_read].lfn_list = 
 					realloc((*directory)[files_read].lfn_list, 
 	     					(parsed_lfn + 1) * sizeof(FatFileLFN));
 
-				(*directory)[files_read].lfn_list[parsed_lfn] = data[i][j].lfn;
+				(*directory)[files_read].lfn_list[parsed_lfn] = data[j + entries_per_cluster * i].lfn;
 				parsed_lfn++;
 			}
 		}
 	}
 
-	for (int i = 0; i < size; i++)
-		free(data[i]);
 	free(data);
-
 	return files_read;
 }
 
@@ -175,14 +177,16 @@ int cmp_parent(char* dirname, file_entry* fe, uint32_t curr_cluster)
 
 uint32_t find_dir_cluster(char* dir, int is_dir)
 {
+	if (!strcmp(dir, "/"))
+		return bpb.extended.RootCluster;
 	if (!strcmp(dir, CWD))
 		return CWD_cluster;
-	else if (dir[strlen(dir) - 1] == '/' && !strncmp(dir, CWD, strlen(CWD)))
+	else if (dir[strlen(dir) - 1] == '/' && !strncmp(dir, CWD, strlen(dir) - 1))
 		return CWD_cluster;
 
 	uint32_t dir_cluster;
 	char* dir_cp = strdup(dir);
-	char* dirname; 
+	char* dirname;
 	if (dir_cp[0] == '/') {
 		dir_cluster = bpb.extended.RootCluster;
 		dirname = strsep(&dir_cp, "/");
@@ -191,12 +195,18 @@ uint32_t find_dir_cluster(char* dir, int is_dir)
 	}
 
 	while ((dirname = strsep(&dir_cp, "/")) != NULL) {
+		if (!strlen(dirname))
+			break;
 		file_entry* fe = 0;
-		int dirs_read = read_directory_table(dir_cluster, &fe, 1);
+		int dirs_read = read_directory_table(dir_cluster, &fe); // TODO: Change size to -1 etc.
 		int dir_found = 0;
 		int dir_i = 0;
+		int is_curr_dir = is_dir;
+		if (!(strrchr(dir, '/') && !strcmp(dirname, strrchr(dir, '/') + 1)))
+			is_curr_dir = is_dir;
+
 		for (; dir_i < dirs_read; dir_i++) {
-			if (cmp_dirname(dirname, &fe[dir_i], is_dir)
+			if (cmp_dirname(dirname, &fe[dir_i], is_curr_dir)
 				|| cmp_parent(dirname, &fe[dir_i], dir_cluster)) {
 				dir_found = 1;
 				break;

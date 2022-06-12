@@ -5,5 +5,6 @@
 
 void ls(char*, int pp);
 void cd(char* newcwd);
+void cat(char* file);
 
 #endif
