@@ -128,34 +128,35 @@ int cmp_dirname(char* dirname, file_entry* fe, int is_dir)
 		return 1;
       	}
 
+	int str_i = 0;
 	for (int lfn_i = fe->lfnc - 1; lfn_i >= 0; lfn_i--) {
 		for (int i = 0; i < 5; i++) {
-			if (strlen(dirname) < lfn_i * 13 + i && fe->lfn_list[lfn_i].name1[i] == ' ')
+			uint16_t c = fe->lfn_list[lfn_i].name1[i];
+			if (c == 0xFFFF || c == ' ' || c == 0)
 				continue;
-			if (strlen(dirname) < lfn_i * 13 + i ||
-				dirname[lfn_i * 13 + i] != fe->lfn_list[lfn_i].name1[i])
+			if (dirname[str_i] != c)
 				return 0;
-		}
-		
-		if (fe->lfn_list[lfn_i].name2[0] == 0xFFFF)
-			break;
-		for (int i = 0; i < 6; i++) {
-			if (strlen(dirname) < lfn_i * 13 + i + 5 &&
-				(fe->lfn_list[lfn_i].name2[i] == ' ' || fe->lfn_list[lfn_i].name2[i] == 0xFFFF))
-				continue;
-			if (strlen(dirname) < lfn_i * 13 + i + 5 ||
-				dirname[lfn_i * 13 + i + 5] != fe->lfn_list[lfn_i].name2[i])
+			if (str_i++ >= strlen(dirname))
 				return 0;
 		}
 
-		if (fe->lfn_list[lfn_i].name3[0] == 0xFFFF)
-			break;
-		for (int i = 0; i < 2; i++) {
-			if (strlen(dirname) < lfn_i * 13 + i + 11 &&
-				(fe->lfn_list[lfn_i].name3[i] == ' ' || fe->lfn_list[lfn_i].name3[i] == 0xFFFF))
+		for (int i = 0; i < 6; i++) {
+			uint16_t c = fe->lfn_list[lfn_i].name2[i];
+			if (c == 0xFFFF || c == ' ' || c == 0)
 				continue;
-			if (strlen(dirname) < lfn_i * 13 + i + 11 ||
-				dirname[lfn_i * 13 + i + 11] != fe->lfn_list[lfn_i].name3[i])
+			if (dirname[str_i] != c)
+				return 0;
+			if (str_i++ >= strlen(dirname))
+				return 0;
+		}
+		
+		for (int i = 0; i < 2; i++) {
+			uint16_t c = fe->lfn_list[lfn_i].name3[i];
+			if (c == 0xFFFF || c == ' ' || c == 0)
+				continue;
+			if (dirname[str_i] != c)
+				return 0;
+			if (str_i++ >= strlen(dirname))
 				return 0;
 		}
 	}
@@ -198,7 +199,7 @@ uint32_t find_dir_cluster(char* dir, int is_dir)
 		if (!strlen(dirname))
 			break;
 		file_entry* fe = 0;
-		int dirs_read = read_directory_table(dir_cluster, &fe); // TODO: Change size to -1 etc.
+		int dirs_read = read_directory_table(dir_cluster, &fe);
 		int dir_found = 0;
 		int dir_i = 0;
 		int is_curr_dir = is_dir;

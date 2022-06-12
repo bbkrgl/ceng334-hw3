@@ -75,21 +75,30 @@ void ls(char* dir, int pp)
 	}
 }
 
-void concat_cwd(char* newcwd) // TODO: Fix
+void concat_cwd(char* newcwd)
 {
-	char* cwd = strdup(CWD);
 	char* nwd = strdup(newcwd);
-	char* tmp;
-	while ((nwd = strsep(&nwd, "/")) != NULL) {
-		if (!strcmp(nwd, "..")) {
-			tmp = strrchr(cwd, '/');
-			if (tmp)
-				*tmp = '\0';
+	char* curr = strsep(&nwd, "/");
+
+	while (curr != NULL) {
+		if (strlen(curr) == 0)
+			continue;
+		if (!strcmp(curr, "..")) {
+			char* sign = strrchr(CWD, '/');
+			*sign = '\0';
+		} else {
+			if (CWD[strlen(CWD) - 1] != '/')
+				strcat(CWD, "/");
+			strcat(CWD, curr);
 		}
+
+		strcat(CWD, "/");
+		curr = strsep(&nwd, "/");
 	}
 
-	printf("%s\n", cwd);
-	free(cwd);
+	if (strlen(CWD) > 1)
+		CWD[strlen(CWD) - 1] = '\0';
+
 	free(nwd);
 }
 
@@ -97,9 +106,12 @@ void cd(char* newcwd)
 {
 	int newcwd_cluster = find_dir_cluster(newcwd, 1);
 	if (newcwd_cluster) {
-		if (CWD[strlen(CWD) - 1] != '/')
-			CWD = strcat(CWD, "/");
-		CWD = strcat(CWD, newcwd);
+		if (newcwd[0] == '/') {
+			free(CWD);
+			CWD = strdup(newcwd);
+		} else {
+			concat_cwd(newcwd);
+		}
 		CWD_cluster = newcwd_cluster;
 	}
 }
@@ -107,7 +119,7 @@ void cd(char* newcwd)
 void cat(char* file)
 {
 	int file_cluster = find_dir_cluster(file, 0);
-	if (!file_cluster)
+	if (!file_cluster || file_cluster == bpb.extended.RootCluster)
 		return;
 
 	char* buffer = 0;
