@@ -79,7 +79,8 @@ int main(int argc, char* argv[])
 			} else if (!strcmp(cmd, "mkdir")) {
 				printf("%s\n", cmd);
 			} else if (!strcmp(cmd, "touch")) {
-				printf("%s\n", cmd);
+				if (cmd_argc > 0)
+					touch(args[0]);
 			} else if (!strcmp(cmd, "mv")) {
 				printf("%s\n", cmd);
 			} else if (!strcmp(cmd, "cat")) {

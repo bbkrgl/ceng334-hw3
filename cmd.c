@@ -41,13 +41,13 @@ void ls(char* dir, int pp)
 		printf("\n");
 	} else {
 		for (int i = 0; i < dirs_read; i++) {
-			if (fe[i].msdos.attributes & 0x10) { // FIXME: Time is not correct
-				printf("drwx------ 1 root root 0 %d %s %d %d:%d ",
-					fe[i].msdos.fileSize, months[((fe[i].msdos.modifiedDate >> 5) & 0x0F) - 1],
+			if (fe[i].msdos.attributes & 0x10) {
+				printf("drwx------ 1 root root 0 0 %s %d %.2d:%.2d ",
+					months[((fe[i].msdos.modifiedDate >> 5) & 0x0F) - 1],
 					fe[i].msdos.modifiedDate & 0x1F, fe[i].msdos.modifiedTime >> 11,
 	   				(fe[i].msdos.modifiedTime >> 5) & 0x3F);
 			} else {
-				printf("-rwx------ 1 root root %d %s %d %d:%d ",
+				printf("-rwx------ 1 root root %d %s %d %.2d:%.2d ",
 					fe[i].msdos.fileSize, months[((fe[i].msdos.modifiedDate >> 5) & 0x0F) - 1],
 					fe[i].msdos.modifiedDate & 0x1F, fe[i].msdos.modifiedTime >> 11,
 	   				(fe[i].msdos.modifiedDate >> 5) & 0x3F);
@@ -134,4 +134,70 @@ void cat(char* file)
 	}
 	if (buffer[i - 1] != '\n')
 		printf("\n");
+}
+
+void touch(char* file)
+{
+	char* dir = strdup(file);
+	char* filename = strrchr(dir, '/');
+	if (filename != NULL) {
+		*filename = 0; 
+		filename++;	
+	} else {
+		filename = dir;
+		dir = CWD;
+	}
+
+	if (filename == NULL)
+		return;
+
+	file_entry fe;
+	fe.lfn_list = 0;
+	fe.lfnc = strlen(filename) / 13 + 1;
+	char c = ' ';
+	for (int i = 0; i < fe.lfnc; i++) {
+		fe.lfn_list = realloc(fe.lfn_list, sizeof(FatFileLFN) * (i + 1));
+		fe.lfn_list[i].attributes = 0x0F;
+		for (int j = 0; j < 5; j++) {
+			if (strlen(filename) < j + i * 13)
+				fe.lfn_list[i].name1[j] = c;
+			else
+				fe.lfn_list[i].name1[j] = filename[j + i * 13];
+		}
+
+		if (strlen(filename) < i * 13 + 5)
+			c = 0xFF;
+		for (int j = 0; j < 6; j++) {
+			if (strlen(filename) < j + 5 + i * 13)
+				fe.lfn_list[i].name2[j] = c;
+			else
+				fe.lfn_list[i].name2[j] = filename[j + i * 13];
+		}
+
+		if (strlen(filename) < i * 13 + 11)
+			c = 0xFF;
+		for (int j = 0; j < 2; j++) {
+			if (strlen(filename) < j + 11 + i * 13)
+				fe.lfn_list[i].name3[j] = c;
+			else
+				fe.lfn_list[i].name3[j] = filename[j + i * 13];
+		}
+	}
+
+	time_t rawtime;
+	struct tm* timeinfo;
+	time(&rawtime);
+	timeinfo = localtime(&rawtime); // or gmtime()
+
+	fe.msdos.attributes = 0x20;
+	fe.msdos.creationDate = fe.msdos.modifiedDate =
+		((timeinfo->tm_year - 80) << 9) | ((timeinfo->tm_mon << 5) + 1) | (timeinfo->tm_mday);
+	fe.msdos.creationTime = fe.msdos.modifiedTime =
+		((timeinfo->tm_hour << 11) | (timeinfo->tm_min << 5) | (timeinfo->tm_sec >> 1));
+
+	fe.msdos.eaIndex = bpb.extended.RootCluster >> 16;
+	fe.msdos.firstCluster = bpb.extended.RootCluster & 0xFFFF;
+
+	write_file_entry(&fe, dir);
+	free(dir);
 }
