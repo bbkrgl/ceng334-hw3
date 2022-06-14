@@ -81,8 +81,10 @@ void concat_cwd(char* newcwd)
 	char* curr = strsep(&nwd, "/");
 
 	while (curr != NULL) {
-		if (strlen(curr) == 0)
+		if (strlen(curr) == 0) {
+			curr = strsep(&nwd, "/");
 			continue;
+		}
 		if (!strcmp(curr, "..")) {
 			char* sign = strrchr(CWD, '/');
 			*sign = '\0';
@@ -92,12 +94,11 @@ void concat_cwd(char* newcwd)
 			strcat(CWD, curr);
 		}
 
-		strcat(CWD, "/");
 		curr = strsep(&nwd, "/");
 	}
 
-	if (strlen(CWD) > 1)
-		CWD[strlen(CWD) - 1] = '\0';
+	if (strlen(CWD) == 0)
+		strcat(CWD, "/");
 
 	free(nwd);
 }
