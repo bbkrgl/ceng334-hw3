@@ -139,7 +139,7 @@ void cat(char* file)
 uint8_t checksum_filename(uint8_t* filename)
 {
 	uint8_t sum = 0;
-	for (int i = 11; i >= 0; i--)
+	for (int i = 11; i; i--)
 		sum = ((sum & 1) << 7) + (sum >> 1) + *filename++;
 	return sum;
 }
@@ -162,13 +162,13 @@ void touch(char* file)
 	file_entry fe;
 	for (int i = 0; i < 8; i++) {
 		if (i < strlen(filename))
-			if (filename[i] == 0xE5)
-				fe.msdos.filename[i] = 0x05;
-			else
-				fe.msdos.filename[i] = filename[i];
+			fe.msdos.filename[i] = filename[i];
 		else
-			fe.msdos.filename[i] = 0xFF;
+			fe.msdos.filename[i] = ' ';
 	}
+	if (filename[0] == 0xE5)
+		fe.msdos.filename[0] = 0x05;
+
 	char* extension = 0;
 	if (strrchr(filename, '.') != NULL) {
 		extension = strrchr(filename, '.');
@@ -199,39 +199,37 @@ void touch(char* file)
 
 	uint8_t checksum = checksum_filename(fe.msdos.extension);
 
-	fe.lfn_list = 0;
 	fe.lfnc = strlen(filename) / 13 + 1;
-	char c = ' ';
-	int seq_num = 1;
-	for (int i = fe.lfnc - 1; i >= 0; i--) {
-		fe.lfn_list = realloc(fe.lfn_list, sizeof(FatFileLFN) * (i + 1));
-		fe.lfn_list[i].sequence_number = seq_num, seq_num++;
-		fe.lfn_list[i].attributes = 0x0F;
-		fe.lfn_list[i].firstCluster = 0x00;
-		fe.lfn_list[i].checksum = checksum;
-		fe.lfn_list[i].reserved = 0;
+	fe.lfn_list = malloc(fe.lfnc * sizeof(FatFileLFN));;	
+	uint8_t seq_num = 1;
+	for (int i = 0; i < fe.lfnc; i++) {
+		fe.lfn_list[fe.lfnc - i - 1].sequence_number = seq_num, seq_num++;
+		fe.lfn_list[fe.lfnc - i - 1].attributes = 0x0F;
+		fe.lfn_list[fe.lfnc - i - 1].firstCluster = 0x00;
+		fe.lfn_list[fe.lfnc - i - 1].checksum = checksum;
+		fe.lfn_list[fe.lfnc - i - 1].reserved = 0;
 		for (int j = 0; j < 5; j++) {
 			if (strlen(filename) < j + i * 13)
-				fe.lfn_list[i].name1[j] = 0xFFFF;
+				fe.lfn_list[fe.lfnc - i - 1].name1[j] = 0xFFFF;
 			else
-				fe.lfn_list[i].name1[j] = filename[j + i * 13];
+				fe.lfn_list[fe.lfnc - i - 1].name1[j] = filename[j + i * 13];
 		}
 
 		for (int j = 0; j < 6; j++) {
 			if (strlen(filename) < j + 5 + i * 13)
-				fe.lfn_list[i].name2[j] = 0xFFFF;
+				fe.lfn_list[fe.lfnc - i - 1].name2[j] = 0xFFFF;
 			else
-				fe.lfn_list[i].name2[j] = filename[j + 5 + i * 13];
+				fe.lfn_list[fe.lfnc - i - 1].name2[j] = filename[j + 5 + i * 13];
 		}
 
 		for (int j = 0; j < 2; j++) {
 			if (strlen(filename) < j + 11 + i * 13)
-				fe.lfn_list[i].name3[j] = 0xFFFF;
+				fe.lfn_list[fe.lfnc - i - 1].name3[j] = 0xFFFF;
 			else
-				fe.lfn_list[i].name3[j] = filename[j + 11 + i * 13];
+				fe.lfn_list[fe.lfnc - i - 1].name3[j] = filename[j + 11 + i * 13];
 		}
 	}
-	fe.lfn_list[0].sequence_number = 'A';
+	fe.lfn_list[0].sequence_number = (seq_num - 1) | 0x40;
 
 	write_file_entry(dir, &fe);
 	free(dir);

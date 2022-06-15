@@ -382,10 +382,10 @@ void open_fs(char* fsname)
 	if (fs_fd == -1)
 		handle_error("Cannot open filesystem");
 
-	int rcount = read(fs_fd, &bpb, sizeof(bpb));
+	int rcount = read(fs_fd, &bpb, sizeof(BPB_struct));
 	if (rcount != sizeof(bpb)) {
 		fprintf(stderr, "Cannot read BPB.\nBytes read: %d, bytes expected: %d\n",
-	  		rcount, (int) sizeof(bpb));
+	  		rcount, (int) sizeof(BPB_struct));
 		exit(0);
 	}
 
