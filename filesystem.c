@@ -35,6 +35,9 @@ void read_fat_tables()
 
 void seek_data_cluster(uint32_t cluster)
 {
+	if (cluster == 0)
+		cluster = bpb.extended.RootCluster;
+
 	int rlseek = lseek(fs_fd, (bpb.ReservedSectorCount +
 		bpb.NumFATs * bpb.extended.FATSize +
 		(cluster - 2) * bpb.SectorsPerCluster) * BPS, SEEK_SET);
@@ -47,9 +50,7 @@ int read_clusters(int fat_id, uint32_t cluster_num, void** data, int size)
 {
 	uint32_t curr_table_cluster = cluster_num;
 	int i = 0;
-	while ((i < size || size == -1)
-		&& curr_table_cluster != 0xFFFFFFF
-		&& curr_table_cluster != 0xFFFFFF8) {
+	while ((i < size || size == -1) && curr_table_cluster < 0xFFFFFF8) {
 		(*data) = realloc(*data, (i + 1) * bpb.SectorsPerCluster * BPS);
 		seek_data_cluster(curr_table_cluster);
 
@@ -67,7 +68,7 @@ int read_clusters(int fat_id, uint32_t cluster_num, void** data, int size)
 	return i;
 }
 
-int read_directory_table(int cluster_num, file_entry** directory) // TODO: Other FATs
+int read_directory_table(int cluster_num, file_entry** directory)
 {
 	FatFileEntry* data = 0;
 	int clusters_read = read_clusters(0, cluster_num, (void**) &data, -1);
@@ -78,7 +79,7 @@ int read_directory_table(int cluster_num, file_entry** directory) // TODO: Other
 	for (int i = 0; i < clusters_read; i++) {
 		for (int j = 0; j < entries_per_cluster; j++) {
 			if (data[j + entries_per_cluster * i].lfn.sequence_number == 0xE5
-				|| data[j + entries_per_cluster * i].lfn.sequence_number == 0) // What does 0xE5 mean???
+				|| data[j + entries_per_cluster * i].lfn.sequence_number == 0)
 				continue;
 
 			if (data[j + entries_per_cluster * i].lfn.attributes != 0x0F) {
@@ -239,11 +240,13 @@ void flush_fat_table()
 	if (rlseek == -1)
 		handle_error("Cannot find FAT tables");
 
-	int size = bpb.NumFATs * bpb.extended.FATSize * BPS;
-	int wcount = write(fs_fd, fat_table, size);
-	if (wcount != size) {
-		fprintf(stderr, "Cannot write FT entry.\nBytes read: %d, bytes expected: %d\n",
-			wcount, size);
+	int size = bpb.extended.FATSize * BPS;
+	for (int i = 0; i < bpb.NumFATs; i++) {
+		int wcount = write(fs_fd, fat_table[i], size);
+		if (wcount != size) {
+			fprintf(stderr, "Cannot write FT entry.\nBytes read: %d, bytes expected: %d\n",
+				wcount, size);
+		}
 	}
 }
 
@@ -295,14 +298,13 @@ int sizeof_dir_entry(file_entry* fe, int dir_num)
 uint32_t get_last_cluster(uint32_t cluster)
 {
 	uint32_t lc = cluster;
-	while (fat_table[0][lc].address != 0xFFFFFFF
-		&& fat_table[0][lc].address != 0xFFFFFF8) {
+	while (fat_table[0][lc].address < 0xFFFFFF8) {
 		lc = fat_table[0][lc].address;
 	}
 	return lc;
 }
 
-void write_file_entry(file_entry* fe, char* dir)
+void write_file_entry(char* dir, file_entry* fe)
 {
 	uint32_t dir_cluster = find_dir_cluster(dir, 1);
 	file_entry* fe_dir = 0;
@@ -322,63 +324,55 @@ void write_file_entry(file_entry* fe, char* dir)
 
 	int entries_written = 0;
 	int entries_per_cluster = bpb.SectorsPerCluster * BPS / sizeof(FatFileEntry);
+	seek_data_cluster(dir_cluster);
 	for (int i = 0; i < dirs_read; i++) {
-		for (int j = 0; j < fe_dir[j].lfnc; j++) {
-			seek_data_cluster(dir_cluster);
-
+		for (int j = 0; j < fe_dir[i].lfnc; j++) {
 			int wcount = write(fs_fd, &fe_dir[i].lfn_list[j], sizeof(FatFileLFN));
 			if (wcount != sizeof(FatFileLFN)) {
 				fprintf(stderr, "Cannot write LFN entry.\nBytes read: %d, bytes expected: %d\n",
-					wcount, sizeof(FatFileLFN));
+					wcount, (int) sizeof(FatFileLFN));
 			}
 			if (entries_written > entries_per_cluster) {
 				entries_written = 0;
 				dir_cluster = fat_table[0][dir_cluster].address;
+				seek_data_cluster(dir_cluster);
 			} else {
 				entries_written++;
 			}
 		}
 
-		seek_data_cluster(dir_cluster);
 		int wcount = write(fs_fd, &fe_dir[i].msdos, sizeof(FatFile83));
 		if (wcount != sizeof(FatFile83)) {
 			fprintf(stderr, "Cannot write msdos entry.\nBytes read: %d, bytes expected: %d\n",
-				wcount, sizeof(FatFile83));
+				wcount, (int) sizeof(FatFile83));
 		}
 		if (entries_written > entries_per_cluster) {
 			entries_written = 0;
 			dir_cluster = fat_table[0][dir_cluster].address;
+			seek_data_cluster(dir_cluster);
 		} else {
 			entries_written++;
 		}
 	}
 	for (int j = 0; j < fe->lfnc; j++) {
-		seek_data_cluster(dir_cluster);
-
 		int wcount = write(fs_fd, &fe->lfn_list[j], sizeof(FatFileLFN));
 		if (wcount != sizeof(FatFileLFN)) {
 			fprintf(stderr, "Cannot write LFN entry.\nBytes read: %d, bytes expected: %d\n",
-				wcount, sizeof(FatFileLFN));
+				wcount, (int) sizeof(FatFileLFN));
 		}
 		if (entries_written > entries_per_cluster) {
 			entries_written = 0;
 			dir_cluster = fat_table[0][dir_cluster].address;
+			seek_data_cluster(dir_cluster);
 		} else {
 			entries_written++;
 		}
 	}
 
-	seek_data_cluster(dir_cluster);
-	int wcount = write(fs_fd, &fe_dir->msdos, sizeof(FatFile83));
+	int wcount = write(fs_fd, &fe->msdos, sizeof(FatFile83));
 	if (wcount != sizeof(FatFile83)) {
 		fprintf(stderr, "Cannot write msdos entry.\nBytes read: %d, bytes expected: %d\n",
-			wcount, sizeof(FatFile83));
-	}
-	if (entries_written > entries_per_cluster) {
-		entries_written = 0;
-		dir_cluster = fat_table[0][dir_cluster].address;
-	} else {
-		entries_written++;
+			wcount, (int) sizeof(FatFile83));
 	}
 }
 
