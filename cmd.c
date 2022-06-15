@@ -197,7 +197,7 @@ void touch(char* file)
 	fe.msdos.firstCluster = 0;
 	fe.msdos.fileSize = 0;
 
-	uint8_t checksum = checksum_filename(fe.msdos.extension);
+	uint8_t checksum = checksum_filename(fe.msdos.filename);
 
 	fe.lfnc = strlen(filename) / 13 + 1;
 	fe.lfn_list = malloc(fe.lfnc * sizeof(FatFileLFN));;	
