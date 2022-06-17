@@ -77,7 +77,8 @@ int main(int argc, char* argv[])
 					ls(CWD, 0);
 				}
 			} else if (!strcmp(cmd, "mkdir")) {
-				printf("%s\n", cmd);
+				if (cmd_argc > 0)
+					mkdir(args[0]);
 			} else if (!strcmp(cmd, "touch")) {
 				if (cmd_argc > 0)
 					touch(args[0]);

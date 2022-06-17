@@ -8,5 +8,6 @@ void ls(char*, int pp);
 void cd(char* newcwd);
 void cat(char* file);
 void touch(char* file);
+void mkdir(char* file);
 
 #endif

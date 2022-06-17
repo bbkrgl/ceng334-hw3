@@ -15,16 +15,14 @@ void ls(char* dir, int pp)
 	uint32_t dir_cluster = find_dir_cluster(dir, 1);
 
 	file_entry* fe = 0;
-	int dot = 1;
 	int dirs_read = read_directory_table(dir_cluster, &fe);
 	if (!pp) {
 		for (int i = 0; i < dirs_read; i++) {
 			if (fe[i].lfnc == 0) {
 				if (fe[i].msdos.filename[0] == 0x2E) {
 					printf(".");
-					if (dot)
+					if (fe[i].msdos.filename[1] != ' ')
 						printf(".");
-					dot--;
 				} else {
 					print_name(fe[i].msdos.filename, 1, 8);
 					print_name(fe[i].msdos.extension, 0, 3);
@@ -56,9 +54,8 @@ void ls(char* dir, int pp)
 			if (fe[i].lfnc == 0) {
 				if (fe[i].msdos.filename[0] == 0x2E) {
 					printf(".");
-					if (dot)
+					if (fe[i].msdos.filename[1] != ' ')
 						printf(".");
-					dot = 1;
 				} else {
 					print_name(fe[i].msdos.filename, 1, 8);
 					print_name(fe[i].msdos.extension, 0, 3);
@@ -144,6 +141,80 @@ uint8_t checksum_filename(uint8_t* filename)
 	return sum;
 }
 
+void create_file_entry(char* filename, file_entry* fe, int is_dir)
+{
+	for (int i = 0; i < 8; i++) {
+		if (i < strlen(filename))
+			fe->msdos.filename[i] = filename[i];
+		else
+			fe->msdos.filename[i] = ' ';
+	}
+	if (filename[0] == 0xE5)
+		fe->msdos.filename[0] = 0x05;
+
+	char* extension = 0;
+	if (strrchr(filename, '.') != NULL) {
+		extension = strrchr(filename, '.');
+		*extension = 0, extension++;
+	}
+
+	for (int i = 0; i < 3; i++) {
+		if (extension && i < strlen(extension))
+			fe->msdos.extension[i] = extension[i];
+		else
+			fe->msdos.extension[i] = ' ';
+	}
+	fe->msdos.attributes = 0x20 | (is_dir << 4);
+	fe->msdos.reserved = 0;
+
+	time_t rawtime;
+	struct tm* timeinfo;
+	time(&rawtime);
+	timeinfo = localtime(&rawtime); // or gmtime()
+	fe->msdos.creationDate = fe->msdos.modifiedDate =
+		((timeinfo->tm_year - 80) << 9) | ((timeinfo->tm_mon << 5) + 1) | (timeinfo->tm_mday);
+	fe->msdos.creationTime = fe->msdos.modifiedTime =
+		((timeinfo->tm_hour << 11) | (timeinfo->tm_min << 5) | (timeinfo->tm_sec >> 1));
+
+	fe->msdos.eaIndex = 0;
+	fe->msdos.firstCluster = 0;
+	fe->msdos.fileSize = 0;
+
+	uint8_t checksum = checksum_filename(fe->msdos.filename);
+
+	fe->lfnc = strlen(filename) / 13 + 1;
+	fe->lfn_list = malloc(fe->lfnc * sizeof(FatFileLFN));;	
+	uint8_t seq_num = 1;
+	for (int i = 0; i < fe->lfnc; i++) {
+		fe->lfn_list[fe->lfnc - i - 1].sequence_number = seq_num, seq_num++;
+		fe->lfn_list[fe->lfnc - i - 1].attributes = 0x0F;
+		fe->lfn_list[fe->lfnc - i - 1].firstCluster = 0x00;
+		fe->lfn_list[fe->lfnc - i - 1].checksum = checksum;
+		fe->lfn_list[fe->lfnc - i - 1].reserved = 0;
+		for (int j = 0; j < 5; j++) {
+			if (strlen(filename) < j + i * 13)
+				fe->lfn_list[fe->lfnc - i - 1].name1[j] = 0xFFFF;
+			else
+				fe->lfn_list[fe->lfnc - i - 1].name1[j] = filename[j + i * 13];
+		}
+
+		for (int j = 0; j < 6; j++) {
+			if (strlen(filename) < j + 5 + i * 13)
+				fe->lfn_list[fe->lfnc - i - 1].name2[j] = 0xFFFF;
+			else
+				fe->lfn_list[fe->lfnc - i - 1].name2[j] = filename[j + 5 + i * 13];
+		}
+
+		for (int j = 0; j < 2; j++) {
+			if (strlen(filename) < j + 11 + i * 13)
+				fe->lfn_list[fe->lfnc - i - 1].name3[j] = 0xFFFF;
+			else
+				fe->lfn_list[fe->lfnc - i - 1].name3[j] = filename[j + 11 + i * 13];
+		}
+	}
+	fe->lfn_list[0].sequence_number = (seq_num - 1) | 0x40;
+}
+
 void touch(char* file)
 {
 	char* dir = strdup(file);
@@ -160,77 +231,28 @@ void touch(char* file)
 		return;
 
 	file_entry fe;
-	for (int i = 0; i < 8; i++) {
-		if (i < strlen(filename))
-			fe.msdos.filename[i] = filename[i];
-		else
-			fe.msdos.filename[i] = ' ';
+	create_file_entry(filename, &fe, 0);
+	write_file_entry(dir, &fe, 0);
+	free(dir);
+}
+
+void mkdir(char* file)
+{
+	char* dir = strdup(file);
+	char* dirname = strrchr(dir, '/');
+	if (dirname != NULL) {
+		*dirname = 0; 
+		dirname++;
+	} else {
+		dirname = dir;
+		dir = strdup(CWD);
 	}
-	if (filename[0] == 0xE5)
-		fe.msdos.filename[0] = 0x05;
 
-	char* extension = 0;
-	if (strrchr(filename, '.') != NULL) {
-		extension = strrchr(filename, '.');
-		*extension = 0, extension++;
-	}
+	if (dirname == NULL)
+		return;
 
-	for (int i = 0; i < 3; i++) {
-		if (extension && i < strlen(extension))
-			fe.msdos.extension[i] = extension[i];
-		else
-			fe.msdos.extension[i] = ' ';
-	}
-	fe.msdos.attributes = 0x20;
-	fe.msdos.reserved = 0;
-
-	time_t rawtime;
-	struct tm* timeinfo;
-	time(&rawtime);
-	timeinfo = localtime(&rawtime); // or gmtime()
-	fe.msdos.creationDate = fe.msdos.modifiedDate =
-		((timeinfo->tm_year - 80) << 9) | ((timeinfo->tm_mon << 5) + 1) | (timeinfo->tm_mday);
-	fe.msdos.creationTime = fe.msdos.modifiedTime =
-		((timeinfo->tm_hour << 11) | (timeinfo->tm_min << 5) | (timeinfo->tm_sec >> 1));
-
-	fe.msdos.eaIndex = 0;
-	fe.msdos.firstCluster = 0;
-	fe.msdos.fileSize = 0;
-
-	uint8_t checksum = checksum_filename(fe.msdos.filename);
-
-	fe.lfnc = strlen(filename) / 13 + 1;
-	fe.lfn_list = malloc(fe.lfnc * sizeof(FatFileLFN));;	
-	uint8_t seq_num = 1;
-	for (int i = 0; i < fe.lfnc; i++) {
-		fe.lfn_list[fe.lfnc - i - 1].sequence_number = seq_num, seq_num++;
-		fe.lfn_list[fe.lfnc - i - 1].attributes = 0x0F;
-		fe.lfn_list[fe.lfnc - i - 1].firstCluster = 0x00;
-		fe.lfn_list[fe.lfnc - i - 1].checksum = checksum;
-		fe.lfn_list[fe.lfnc - i - 1].reserved = 0;
-		for (int j = 0; j < 5; j++) {
-			if (strlen(filename) < j + i * 13)
-				fe.lfn_list[fe.lfnc - i - 1].name1[j] = 0xFFFF;
-			else
-				fe.lfn_list[fe.lfnc - i - 1].name1[j] = filename[j + i * 13];
-		}
-
-		for (int j = 0; j < 6; j++) {
-			if (strlen(filename) < j + 5 + i * 13)
-				fe.lfn_list[fe.lfnc - i - 1].name2[j] = 0xFFFF;
-			else
-				fe.lfn_list[fe.lfnc - i - 1].name2[j] = filename[j + 5 + i * 13];
-		}
-
-		for (int j = 0; j < 2; j++) {
-			if (strlen(filename) < j + 11 + i * 13)
-				fe.lfn_list[fe.lfnc - i - 1].name3[j] = 0xFFFF;
-			else
-				fe.lfn_list[fe.lfnc - i - 1].name3[j] = filename[j + 11 + i * 13];
-		}
-	}
-	fe.lfn_list[0].sequence_number = (seq_num - 1) | 0x40;
-
-	write_file_entry(dir, &fe);
+	file_entry fe;
+	create_file_entry(dirname, &fe, 1);
+	write_file_entry(dir, &fe, 1);
 	free(dir);
 }

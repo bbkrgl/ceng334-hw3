@@ -169,13 +169,11 @@ int cmp_dirname(char* dirname, file_entry* fe, int is_dir)
 	return 1;
 }
 
-int cmp_parent(char* dirname, file_entry* fe, uint32_t curr_cluster)
+int cmp_parent(char* dirname, file_entry* fe)
 {
-	if (fe->msdos.filename[0] != 0x2E || strcmp(dirname, ".."))
-		return 0;
-	
-	int cl = (fe->msdos.eaIndex << 16) | fe->msdos.firstCluster;
-	if (curr_cluster == cl)
+	if (fe->msdos.filename[0] != 0x2E ||
+		fe->msdos.filename[1] != 0x2E ||
+		strcmp(dirname, ".."))
 		return 0;
 
 	return 1;
@@ -213,7 +211,7 @@ uint32_t find_dir_cluster(char* dir, int is_dir)
 
 		for (; dir_i < dirs_read; dir_i++) {
 			if (cmp_dirname(dirname, &fe[dir_i], is_curr_dir)
-				|| cmp_parent(dirname, &fe[dir_i], dir_cluster)) {
+				|| cmp_parent(dirname, &fe[dir_i])) {
 				dir_found = 1;
 				break;
 			}
@@ -234,8 +232,9 @@ uint32_t find_dir_cluster(char* dir, int is_dir)
 	return dir_cluster;
 }
 
-void flush_fat_table()
+void flush_fat_table(int alloc_cl)
 {
+	int curr_pos = lseek(fs_fd, 0, SEEK_CUR);
 	int rlseek = lseek(fs_fd, bpb.ReservedSectorCount * BPS, SEEK_SET);
 	if (rlseek == -1)
 		handle_error("Cannot find FAT tables");
@@ -248,41 +247,52 @@ void flush_fat_table()
 				wcount, size);
 		}
 	}
+
+	if (alloc_cl > 1) {
+		rlseek = lseek(fs_fd, bpb.extended.FSInfo * BPS + 0x1E8, SEEK_SET);
+		int free_cl;
+		int rrcount = read(fs_fd, &free_cl, 4);
+		if (rrcount != 4)
+			handle_error("Cannot read free cluster count");
+		free_cl -= alloc_cl;
+		rlseek = lseek(fs_fd, bpb.extended.FSInfo * BPS + 0x1E8, SEEK_SET);
+		int wcount = write(fs_fd, &free_cl, 4);
+		if (rrcount != 4)
+			handle_error("Cannot write free cluster count");
+	}
+
+	rlseek = lseek(fs_fd, curr_pos, SEEK_SET);
+	if (rlseek == -1)
+		handle_error("Cannot return to original position");
 }
 
 uint32_t allocate_clusters(int num_entries, int flush)
 {
 	uint32_t first_cluster = 0;
-	int cluster = 0;
-	int old_cluster = 0;
-	int is_first = 1;
+	int cluster = 0, old_cluster = 0, i = 0;
 	int num_clusters = bpb.extended.FATSize * BPS / sizeof(FAT_entry);
-	for (; cluster < num_clusters; cluster++) {
+	for (; cluster < num_clusters && i < num_entries; cluster++) {
 		if (fat_table[0][cluster].address == 0) {
-			if (!num_entries)
-				break;
-
-			if (is_first) {
+			if (!i) {
 				first_cluster = cluster;
 				old_cluster = cluster;
-				is_first = 0;
-				num_entries--;
-				for (int i = 0; i < bpb.NumFATs; i++)
-					fat_table[i][cluster].address = 0xFFFFFF8;
+				for (int j = 0; j < bpb.NumFATs; j++)
+					fat_table[j][cluster].address = 0xFFFFFF8;
+				i++;
 				continue;
 			}
-	
-			for (int i = 0; i < bpb.NumFATs; i++) {
-				fat_table[i][old_cluster].address = cluster;
-				fat_table[i][cluster].address = 0xFFFFFF8;
+
+			for (int j = 0; j < bpb.NumFATs; j++) {
+				fat_table[j][old_cluster].address = cluster;
+				fat_table[j][cluster].address = 0xFFFFFF8;
 			}
 			old_cluster = cluster;
-			num_entries--;
+			i++;
 		}
 	}
 
 	if (flush)
-		flush_fat_table();
+		flush_fat_table(i);
 
 	return first_cluster;
 }
@@ -304,9 +314,10 @@ uint32_t get_last_cluster(uint32_t cluster)
 	return lc;
 }
 
-void write_file_entry(char* dir, file_entry* fe)
+void write_file_entry(char* dir, file_entry* fe, int create_dir)
 {
 	uint32_t dir_cluster = find_dir_cluster(dir, 1);
+	uint32_t first_dir_cluster = dir_cluster;
 	file_entry* fe_dir = 0;
 	int dirs_read = read_directory_table(dir_cluster, &fe_dir);
 	
@@ -319,7 +330,7 @@ void write_file_entry(char* dir, file_entry* fe)
 		uint32_t lc = get_last_cluster(dir_cluster);
 		for (int i = 0; i < bpb.NumFATs; i++)
 			fat_table[i][lc].address = alloc_cluster;
-		flush_fat_table();
+		flush_fat_table(alloc_cluster);
 	}
 
 	int entries_written = 0;
@@ -369,10 +380,44 @@ void write_file_entry(char* dir, file_entry* fe)
 		}
 	}
 
-	int wcount = write(fs_fd, &fe->msdos, sizeof(FatFile83));
-	if (wcount != sizeof(FatFile83)) {
-		fprintf(stderr, "Cannot write msdos entry.\nBytes read: %d, bytes expected: %d\n",
-			wcount, (int) sizeof(FatFile83));
+	if (create_dir) {
+		uint32_t newdir_cluster = allocate_clusters(1, 1);
+		fe->msdos.eaIndex = newdir_cluster >> 16;
+		fe->msdos.firstCluster = newdir_cluster & 0xFFFF;
+		int wcount = write(fs_fd, &fe->msdos, sizeof(FatFile83));
+		if (wcount != sizeof(FatFile83)) {
+			fprintf(stderr, "Cannot write msdos entry.\nBytes read: %d, bytes expected: %d\n",
+				wcount, (int) sizeof(FatFile83));
+		}
+
+		FatFile83 fe_dot = fe->msdos;
+		for (int i = 11; i; i--)
+			fe_dot.filename[i] = ' ';
+		fe_dot.filename[0] = 0x2E;
+		fe_dot.attributes = 0x30;
+		seek_data_cluster(newdir_cluster);
+		wcount = write(fs_fd, &fe_dot, sizeof(FatFile83));
+		if (wcount != sizeof(FatFile83)) {
+			fprintf(stderr, "Cannot write msdos entry.\nBytes read: %d, bytes expected: %d\n",
+				wcount, (int) sizeof(FatFile83));
+		}
+
+		fe_dot.filename[1] = 0x2E;
+		if (first_dir_cluster == bpb.extended.RootCluster)
+			first_dir_cluster = 0;
+		fe_dot.eaIndex = first_dir_cluster >> 16;
+		fe_dot.firstCluster = first_dir_cluster & 0xFFFF;
+		wcount = write(fs_fd, &fe_dot, sizeof(FatFile83));
+		if (wcount != sizeof(FatFile83)) {
+			fprintf(stderr, "Cannot write msdos entry.\nBytes read: %d, bytes expected: %d\n",
+				wcount, (int) sizeof(FatFile83));
+		}
+	} else {
+		int wcount = write(fs_fd, &fe->msdos, sizeof(FatFile83));
+		if (wcount != sizeof(FatFile83)) {
+			fprintf(stderr, "Cannot write msdos entry.\nBytes read: %d, bytes expected: %d\n",
+				wcount, (int) sizeof(FatFile83));
+		}
 	}
 }
 
