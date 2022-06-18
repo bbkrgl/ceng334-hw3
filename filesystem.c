@@ -399,7 +399,7 @@ void write_file_entry(char* dir, file_entry* fe, int create_dir)
 			if (entries_written >= entries_per_cluster) {
 				entries_written = 0;
 				dir_cluster = fat_table[0][dir_cluster].address;
-				(dir_cluster);
+				seek_data_cluster(dir_cluster);
 			}
 		}
 
