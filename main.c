@@ -53,7 +53,7 @@ int main(int argc, char* argv[])
 				continue;
 			}
 
-			if (!strcmp(cmd, "exit")) {
+			if (!strcmp(cmd, "quit")) {
 				free(cmd);
 				for (int j = 0; j < cmd_argc; j++)
 					free(args[j]);
@@ -83,7 +83,8 @@ int main(int argc, char* argv[])
 				if (cmd_argc > 0)
 					touch(args[0]);
 			} else if (!strcmp(cmd, "mv")) {
-				printf("%s\n", cmd);
+				if (cmd_argc > 1)
+					mv(args[0], args[1]);
 			} else if (!strcmp(cmd, "cat")) {
 				if (cmd_argc > 0)
 					cat(args[0]);

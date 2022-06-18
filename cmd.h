@@ -4,10 +4,11 @@
 #include "filesystem.h"
 #include <time.h>
 
-void ls(char*, int pp);
+void ls(char* dir, int pp);
 void cd(char* newcwd);
 void cat(char* file);
 void touch(char* file);
 void mkdir(char* file);
+void mv(char* src, char* dst);
 
 #endif

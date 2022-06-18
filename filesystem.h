@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
+#include <stddef.h>
 
 #include "fat32.h"
 
@@ -34,7 +35,8 @@ extern char* months[];
 void open_fs(char* fsname);
 int read_clusters(int fat_id, uint32_t cluster_num, void** data, int size);
 int read_directory_table(int cluster_num, file_entry** directory);
-uint32_t find_dir_cluster(char* dir, int is_dir);
-void write_file_entry(char* dir, file_entry* fe, int create_dir);
+uint32_t find_dir_cluster(char* dir, file_entry **fe_return_parent,
+	int* dir_i_return, int* dirs_read_return, int is_dir);
+void write_file_entry(char* dir, file_entry* fe, int create_dir, int del_i);
 
 #endif
