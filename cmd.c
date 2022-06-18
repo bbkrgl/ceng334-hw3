@@ -273,17 +273,36 @@ void mv(char* src, char* dst)
 		dst_dir = strdup(CWD);
 	}
 
+	int rename = 0;
+	uint32_t dst_cluster = find_dir_cluster(dst, 0, 0, 0, 1);
+	if (!dst_cluster) {
+		rename = 1;
+		dst_cluster = find_dir_cluster(dst_dir, 0, 0, 0, 1);
+		if (!dst_cluster) {
+			free(dst_dir);
+			return;
+		}
+	} else {
+		dst_dir = dst_filename;
+		dst_filename = 0;
+	}
+
 	file_entry* fe_src = 0;
 	int dir_i, dirs_read;
 	int is_dir = 0;
 	uint32_t src_cluster = find_dir_cluster(src, &fe_src, &dir_i, &dirs_read, 0);
 	if (!src_cluster) {
-		src_cluster = find_dir_cluster(src, &fe_src, &dir_i, &dirs_read, -1);
+		src_cluster = find_dir_cluster(src, &fe_src, &dir_i, &dirs_read, 1);
 		is_dir = 1;
-		if (!src_cluster)
+		if (!src_cluster) {
+			for (int i = 0; i < dirs_read; i++)
+				free(fe_src[i].lfn_list);
+			free(fe_src);
+			free(dst_dir);
 			return;
+		}
 	}
-	
+
 	file_entry fe = {0};
 	if (dst_filename && strlen(dst_filename) > 0) {
 		create_file_entry(dst_filename, &fe, 0);
@@ -304,7 +323,12 @@ void mv(char* src, char* dst)
 	fe.msdos.firstCluster = fe_src[dir_i].msdos.firstCluster;
 	fe.msdos.fileSize = fe_src[dir_i].msdos.fileSize;
 
-	uint32_t src_parent = (fe_src[0].msdos.eaIndex << 16) | fe_src[0].msdos.firstCluster;
+	uint32_t src_parent;
+	if (fe_src[0].lfnc == 0)
+		src_parent = (fe_src[0].msdos.eaIndex << 16) | fe_src[0].msdos.firstCluster;
+	else
+		src_parent = bpb.extended.RootCluster;
+
 	for (int i = 0; i < fe_src[dir_i].lfnc; i++)
 		fe_src[dir_i].lfn_list[i].sequence_number = 0xE5;
 	fe_src[dir_i].msdos.filename[0] = 0xE5;

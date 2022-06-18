@@ -232,7 +232,7 @@ uint32_t find_dir_cluster(char* dir, file_entry **fe_return_parent, int* dir_i_r
 		if (dir_cluster == 0)
 			dir_cluster = bpb.extended.RootCluster;
 
-		if (!fe_return_parent || is_dir == 1) {
+		if (!fe_return_parent) {
 			free(fe->lfn_list);
 			free(fe);
 		} else {
