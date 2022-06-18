@@ -37,6 +37,7 @@ int read_clusters(int fat_id, uint32_t cluster_num, void** data, int size);
 int read_directory_table(int cluster_num, file_entry** directory);
 uint32_t find_dir_cluster(char* dir, file_entry **fe_return_parent,
 	int* dir_i_return, int* dirs_read_return, int is_dir);
-void write_file_entry(char* dir, file_entry* fe, int create_dir, int del_i);
+void write_file_entry(char* dir, file_entry* fe, int create_dir);
+void write_directory(uint32_t dir_cluster, file_entry* fe_dir, int dir_size);
 
 #endif

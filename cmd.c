@@ -232,7 +232,7 @@ void touch(char* file)
 
 	file_entry fe = {0};
 	create_file_entry(filename, &fe, 0);
-	write_file_entry(dir, &fe, 0, -1);
+	write_file_entry(dir, &fe, 0);
 
 	free(fe.lfn_list);
 	free(dir);
@@ -255,7 +255,7 @@ void mkdir(char* file)
 
 	file_entry fe = {0};
 	create_file_entry(dirname, &fe, 1);
-	write_file_entry(dir, &fe, 1, -1);
+	write_file_entry(dir, &fe, 1);
 
 	free(fe.lfn_list);
 	free(dir);
@@ -263,22 +263,6 @@ void mkdir(char* file)
 
 void mv(char* src, char* dst)
 {
-	file_entry* fe_src;
-	int dir_i, dirs_read;
-	uint32_t src_cluster = find_dir_cluster(src, &fe_src, &dir_i, &dirs_read, -1);
-	if (!src_cluster)
-		return;
-
-	char* src_dir = strdup(src);
-	char* src_filename = strrchr(src_dir, '/');
-	if (src_filename != NULL) {
-		*src_filename = 0; 
-		src_filename++;
-	} else {
-		src_filename = src_dir;
-		src_dir = strdup(CWD);
-	}
-
 	char* dst_dir = strdup(dst);
 	char* dst_filename = strrchr(dst_dir, '/');
 	if (dst_filename != NULL) {
@@ -289,22 +273,46 @@ void mv(char* src, char* dst)
 		dst_dir = strdup(CWD);
 	}
 
-	if (dst_filename) {
-		file_entry fe = {0};
+	file_entry* fe_src = 0;
+	int dir_i, dirs_read;
+	int is_dir = 0;
+	uint32_t src_cluster = find_dir_cluster(src, &fe_src, &dir_i, &dirs_read, 0);
+	if (!src_cluster) {
+		src_cluster = find_dir_cluster(src, &fe_src, &dir_i, &dirs_read, -1);
+		is_dir = 1;
+		if (!src_cluster)
+			return;
+	}
+	
+	file_entry fe = {0};
+	if (dst_filename && strlen(dst_filename) > 0) {
 		create_file_entry(dst_filename, &fe, 0);
-		for (int i = 11; i; i--)
-			fe_src[dir_i].msdos.filename[i] = fe.msdos.filename[i];
-		free(fe_src[dir_i].lfn_list);
-		fe_src[dir_i].lfnc = fe.lfnc;
-		fe_src[dir_i].lfn_list = fe.lfn_list;
-
-		free(dst_filename);
+	} else {
+		fe.lfnc = fe_src[dir_i].lfnc;
+		fe.lfn_list = malloc(fe_src[dir_i].lfnc * sizeof(FatFileLFN));
+		memcpy(fe.lfn_list, fe_src[dir_i].lfn_list, fe_src[dir_i].lfnc * sizeof(FatFileLFN));
+		memcpy(fe.msdos.filename, fe_src[dir_i].msdos.filename, 8);
+		memcpy(fe.msdos.extension, fe_src[dir_i].msdos.extension, 3);
 	}
 
-	if (!strcmp(src_dir, dst_dir))
-		write_file_entry(dst_dir, &fe_src[dir_i], 0, dir_i);
+	fe.msdos.attributes = fe_src[dir_i].msdos.attributes;
+	fe.msdos.creationDate = fe_src[dir_i].msdos.creationDate;
+	fe.msdos.creationTime = fe_src[dir_i].msdos.creationTime;
+	fe.msdos.modifiedDate = fe_src[dir_i].msdos.modifiedDate;
+	fe.msdos.modifiedTime = fe_src[dir_i].msdos.modifiedTime;
+	fe.msdos.eaIndex = fe_src[dir_i].msdos.eaIndex;
+	fe.msdos.firstCluster = fe_src[dir_i].msdos.firstCluster;
+	fe.msdos.fileSize = fe_src[dir_i].msdos.fileSize;
+
+	uint32_t src_parent = (fe_src[0].msdos.eaIndex << 16) | fe_src[0].msdos.firstCluster;
+	for (int i = 0; i < fe_src[dir_i].lfnc; i++)
+		fe_src[dir_i].lfn_list[i].sequence_number = 0xE5;
+	fe_src[dir_i].msdos.filename[0] = 0xE5;
+	write_directory(src_parent, fe_src, dirs_read);
+	if (!is_dir)
+		write_file_entry(dst_dir, &fe, 0);
 	else
-		write_file_entry(dst_dir, &fe_src[dir_i], 0, -1);
+		write_file_entry(dst_dir, &fe, -1);
 
 	for (int i = 0; i < dirs_read; i++)
 		free(fe_src[i].lfn_list);

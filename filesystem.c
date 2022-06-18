@@ -232,7 +232,7 @@ uint32_t find_dir_cluster(char* dir, file_entry **fe_return_parent, int* dir_i_r
 		if (dir_cluster == 0)
 			dir_cluster = bpb.extended.RootCluster;
 
-		if (!fe_return_parent || is_dir) {
+		if (!fe_return_parent || is_dir == 1) {
 			free(fe->lfn_list);
 			free(fe);
 		} else {
@@ -328,7 +328,42 @@ uint32_t get_last_cluster(uint32_t cluster)
 	return lc;
 }
 
-void write_file_entry(char* dir, file_entry* fe, int create_dir, int del_i)
+void write_directory(uint32_t dir_cluster, file_entry* fe_dir, int dir_size)
+{
+	int entries_written = 0;
+	int entries_per_cluster = bpb.BytesPerSector * BPS / sizeof(FatFileEntry);
+
+	seek_data_cluster(dir_cluster);
+	for (int i = 0; i < dir_size; i++) {
+		for (int j = 0; j < fe_dir[i].lfnc; j++) {
+			int wcount = write(fs_fd, &fe_dir[i].lfn_list[j], sizeof(FatFileLFN));
+			if (wcount != sizeof(FatFileLFN)) {
+				fprintf(stderr, "Cannot write LFN entry.\nBytes read: %d, bytes expected: %d\n",
+					wcount, (int) sizeof(FatFileLFN));
+			}
+			entries_written++;
+			if (entries_written >= entries_per_cluster) {
+				entries_written = 0;
+				dir_cluster = fat_table[0][dir_cluster].address;
+				seek_data_cluster(dir_cluster);
+			}
+		}
+
+		int wcount = write(fs_fd, &fe_dir[i].msdos, sizeof(FatFile83));
+		if (wcount != sizeof(FatFile83)) {
+			fprintf(stderr, "Cannot write msdos entry.\nBytes read: %d, bytes expected: %d\n",
+				wcount, (int) sizeof(FatFile83));
+		}
+		entries_written++;
+		if (entries_written >= entries_per_cluster) {
+			entries_written = 0;
+			dir_cluster = fat_table[0][dir_cluster].address;
+			seek_data_cluster(dir_cluster);
+		}
+	}
+}
+
+void write_file_entry(char* dir, file_entry* fe, int create_dir)
 {
 	uint32_t dir_cluster = find_dir_cluster(dir, 0, 0, 0, 1);
 	if (!dir_cluster)
@@ -337,11 +372,6 @@ void write_file_entry(char* dir, file_entry* fe, int create_dir, int del_i)
 	uint32_t first_dir_cluster = dir_cluster;
 	file_entry* fe_dir = 0;
 	int dirs_read = read_directory_table(dir_cluster, &fe_dir);
-	if (del_i >= 0) {
-		for (int i = 0; i < fe_dir[del_i].lfnc; i++)
-			fe_dir[del_i].lfn_list[i].sequence_number = 0xE5;
-		fe_dir[del_i].msdos.attributes = 0xE5;
-	}
 
 	int initial_size = sizeof_dir_entry(fe_dir, dirs_read);
 	int new_size = initial_size + sizeof_dir_entry(fe, 1);
@@ -369,7 +399,7 @@ void write_file_entry(char* dir, file_entry* fe, int create_dir, int del_i)
 			if (entries_written >= entries_per_cluster) {
 				entries_written = 0;
 				dir_cluster = fat_table[0][dir_cluster].address;
-				seek_data_cluster(dir_cluster);
+				(dir_cluster);
 			}
 		}
 
