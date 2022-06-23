@@ -105,6 +105,9 @@ void concat_cwd(char* newcwd)
 void cd(char* newcwd)
 {
 	int newcwd_cluster = find_dir_cluster(newcwd, 0, 0, 0, 1);
+	if (newcwd_cluster == CWD_cluster)
+		return;
+
 	if (newcwd_cluster) {
 		if (newcwd[0] == '/') {
 			free(CWD);
@@ -263,6 +266,7 @@ void mkdir(char* file)
 
 void mv(char* src, char* dst)
 {
+	// TODO: When moving dir from dir to root, Invalid '..' entry in the second slot.
 	char* dst_dir = strdup(dst);
 	char* dst_filename = strrchr(dst_dir, '/');
 	if (dst_filename != NULL) {
