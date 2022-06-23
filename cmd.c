@@ -13,6 +13,8 @@ void print_name(void* str, int start, int len)
 void ls(char* dir, int pp)
 {
 	uint32_t dir_cluster = find_dir_cluster(dir, 0, 0, 0, 1);
+	if (!dir_cluster)
+		return;
 
 	file_entry* fe = 0;
 	int dirs_read = read_directory_table(dir_cluster, &fe);
@@ -129,8 +131,6 @@ void cat(char* file)
 			break;
 		printf("%c", buffer[i]);
 	}
-	if (buffer[i - 1] != '\n')
-		printf("\n");
 }
 
 uint8_t checksum_filename(uint8_t* filename)

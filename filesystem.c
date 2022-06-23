@@ -207,8 +207,8 @@ uint32_t find_dir_cluster(char* dir, file_entry **fe_return_parent, int* dir_i_r
 		int dirs_read = read_directory_table(dir_cluster, &fe);
 		int dir_found = 0;
 		int dir_i = 0;
-		int is_curr_dir = is_dir;
-		if (!(strrchr(dir, '/') && !strcmp(dirname, strrchr(dir, '/') + 1)))
+		int is_curr_dir = 1;
+		if ((strrchr(dir, '/') && !strcmp(dirname, strrchr(dir, '/') + 1)))
 			is_curr_dir = is_dir;
 
 		for (; dir_i < dirs_read; dir_i++) {
@@ -222,7 +222,7 @@ uint32_t find_dir_cluster(char* dir, file_entry **fe_return_parent, int* dir_i_r
 		if (!dir_found) {
 			free(fe->lfn_list);
 			free(fe);
-			free(dir_cp);
+			//free(dir_cp);
 			if (fe_return_parent)
 				*fe_return_parent = 0;
 			return 0;
