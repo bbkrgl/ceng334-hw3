@@ -48,7 +48,7 @@ void ls(char* dir, int pp)
 				printf("-rwx------ 1 root root %d %s %d %.2d:%.2d ",
 					fe[i].msdos.fileSize, months[((fe[i].msdos.modifiedDate >> 5) & 0x0F) - 1],
 					fe[i].msdos.modifiedDate & 0x1F, fe[i].msdos.modifiedTime >> 11,
-	   				(fe[i].msdos.modifiedDate >> 5) & 0x3F);
+	   				(fe[i].msdos.modifiedTime >> 5) & 0x3F);
 			}
 
 			if (fe[i].lfnc == 0) {
@@ -170,7 +170,7 @@ void create_file_entry(char* filename, file_entry* fe, int is_dir)
 	time_t rawtime;
 	struct tm* timeinfo;
 	time(&rawtime);
-	timeinfo = localtime(&rawtime); // or gmtime()
+	timeinfo = gmtime(&rawtime); // or localtime()
 	fe->msdos.creationDate = fe->msdos.modifiedDate =
 		((timeinfo->tm_year - 80) << 9) | ((timeinfo->tm_mon << 5) + 1) | (timeinfo->tm_mday);
 	fe->msdos.creationTime = fe->msdos.modifiedTime =
@@ -183,7 +183,7 @@ void create_file_entry(char* filename, file_entry* fe, int is_dir)
 	uint8_t checksum = checksum_filename(fe->msdos.filename);
 
 	fe->lfnc = strlen(filename) / 13 + 1;
-	fe->lfn_list = malloc(fe->lfnc * sizeof(FatFileLFN));;	
+	fe->lfn_list = malloc(fe->lfnc * sizeof(FatFileLFN));
 	uint8_t seq_num = 1;
 	for (int i = 0; i < fe->lfnc; i++) {
 		fe->lfn_list[fe->lfnc - i - 1].sequence_number = seq_num, seq_num++;
