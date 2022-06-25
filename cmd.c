@@ -266,7 +266,6 @@ void mkdir(char* file)
 
 void mv(char* src, char* dst)
 {
-	// TODO: When moving dir from dir to root, Invalid '..' entry in the second slot.
 	char* dst_dir = strdup(dst);
 	char* dst_filename = strrchr(dst_dir, '/');
 	if (dst_filename != NULL) {

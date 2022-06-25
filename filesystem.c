@@ -479,6 +479,8 @@ void write_file_entry(char* dir, file_entry* fe, int create_dir)
 		int rlseek = lseek(fs_fd, sizeof(FatFile83) + offsetof(FatFile83, eaIndex), SEEK_CUR);
 		if (rlseek == -1)
 			handle_error("Cannot seek to msdos entry.");
+		if (first_dir_cluster == bpb.extended.RootCluster)
+			first_dir_cluster = 0;
 		uint16_t eaIndex = first_dir_cluster >> 16;
 		wcount = write(fs_fd, &eaIndex, sizeof(uint16_t));
 		if (wcount != sizeof(uint16_t)) {
