@@ -201,19 +201,18 @@ uint32_t find_dir_cluster(char* dir, file_entry **fe_return_parent, int* dir_i_r
 	}
 
 	while ((dirname = strsep(&dir_cp, "/")) != NULL) {
-		if (!strlen(dirname)) {
+		if (!strlen(dirname))
 			break;
-		} else if (!strcmp(dirname, ".")) {
-			dir_cluster = CWD_cluster;
+		else if (!strcmp(dirname, "."))
 			continue;
-		}
 
 		file_entry* fe = 0;
 		int dirs_read = read_directory_table(dir_cluster, &fe);
 		int dir_found = 0;
 		int dir_i = 0;
 		int is_curr_dir = 1;
-		if (!(strrchr(dir, '/') && !strcmp(dirname, strrchr(dir, '/') + 1)))
+		char* last_fname = strrchr(dir, '/');
+		if (last_fname && !strcmp(dirname, last_fname + 1))
 			is_curr_dir = is_dir;
 
 		for (; dir_i < dirs_read; dir_i++) {
@@ -227,7 +226,6 @@ uint32_t find_dir_cluster(char* dir, file_entry **fe_return_parent, int* dir_i_r
 		if (!dir_found) {
 			free(fe->lfn_list);
 			free(fe);
-			//free(dir_cp);
 			if (fe_return_parent)
 				*fe_return_parent = 0;
 			return 0;
@@ -241,6 +239,8 @@ uint32_t find_dir_cluster(char* dir, file_entry **fe_return_parent, int* dir_i_r
 			free(fe->lfn_list);
 			free(fe);
 		} else {
+			if (!(*fe_return_parent))
+				free(*fe_return_parent);
 			*fe_return_parent = fe;
 			*dir_i_return = dir_i;
 			*dirs_read_return = dirs_read;
